@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Modular Image Processing Toolkit — Browser Engine</title>
+  
+  <!-- FontAwesome Icons for Adobe/Figma style look -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- Sleek Custom Style Theme -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Top App Navbar Header -->
+  <header>
+    <div class="logo-section">
+      <i class="fa-solid fa-wand-magic-sparkles text-accent" style="font-size: 16px; color: var(--text-accent);"></i>
+      <h1>IMAGINE</h1>
+      <span class="logo-badge">ENGINE</span>
+    </div>
+    
+    <div class="top-bar-actions">
+      <!-- Undo / Redo buttons -->
+      <button class="btn-icon" id="btn-undo" title="Undo (Ctrl+Z)" disabled>
+        <i class="fa-solid fa-arrow-rotate-left"></i>
+      </button>
+      <button class="btn-icon" id="btn-redo" title="Redo (Ctrl+Y)" disabled>
+        <i class="fa-solid fa-arrow-rotate-right"></i>
+      </button>
+      
+      <!-- Split-screen before/after button -->
+      <button class="btn" id="btn-compare" style="width: auto; padding: 6px 12px; font-size: 12px;" title="Hold Spacebar to compare">
+        <i class="fa-solid fa-eye"></i> Show Original
+      </button>
+      
+      <!-- Upload New File Button -->
+      <label class="btn primary" style="width: auto; padding: 6px 14px; font-size: 12px; margin: 0;">
+        <i class="fa-solid fa-folder-open"></i> Open Image
+        <input type="file" id="file-picker-top" accept="image/*" style="display: none;">
+      </label>
+    </div>
+  </header>
+
+  <!-- Core App Workspace Grid Layout -->
+  <div class="app-container">
+
+    <!-- Left Sidebar: History stack, Zoom controls, Quick stats -->
+    <aside class="left-sidebar">
+      <div class="section-title">Viewport</div>
+      <div class="btn-group" style="grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 4px;">
+        <button class="btn" id="btn-zoom-out" style="padding: 6px;"><i class="fa-solid fa-magnifying-glass-minus"></i></button>
+        <button class="btn" id="btn-zoom-in" style="padding: 6px;"><i class="fa-solid fa-magnifying-glass-plus"></i></button>
+      </div>
+      <select id="select-zoom" style="padding: 6px; font-size: 11px;">
+        <option value="fit">Fit Image</option>
+        <option value="0.5">50%</option>
+        <option value="1">100%</option>
+        <option value="1.5">150%</option>
+        <option value="2">200%</option>
+      </select>
+
+      <div class="section-title" style="margin-top: 12px;">Edit History</div>
+      <div class="history-list" id="history-container">
+        <!-- Rendered dynamically in ui.js -->
+        <div style="color: var(--text-muted); font-size: 11px; text-align: center; padding: 12px;">No history yet</div>
+      </div>
+      
+      <div class="shortcut-overlay" style="margin-top: auto;">
+        <div class="section-title" style="margin-bottom: 8px; font-size: 10px;">Keyboard Keys</div>
+        <div class="shortcut-item"><span>Undo</span><span class="key-badge">Ctrl+Z</span></div>
+        <div class="shortcut-item"><span>Redo</span><span class="key-badge">Ctrl+Y</span></div>
+        <div class="shortcut-item"><span>Save</span><span class="key-badge">Ctrl+S</span></div>
+        <div class="shortcut-item"><span>Before</span><span class="key-badge">Space</span></div>
+      </div>
+    </aside>
+
+    <!-- Center Workspace Area -->
+    <main class="workspace">
+      
+      <!-- Drag & Drop Zone Overlay (Hidden after initial upload) -->
+      <div class="upload-zone" id="drop-zone">
+        <div class="upload-box" id="upload-box">
+          <i class="fa-solid fa-cloud-arrow-up upload-icon"></i>
+          <h3>Import Image File</h3>
+          <p>Drag and drop your image file here or click to browse</p>
+          <label class="btn primary" style="width: auto; padding: 10px 24px;">
+            Browse Files
+            <input type="file" id="file-picker-main" accept="image/*" style="display: none;">
+          </label>
+          <div style="margin-top: 16px; font-size: 11px; color: var(--text-muted);">
+            Supports PNG, JPEG, WebP, GIF, and TIFF
+          </div>
+        </div>
+      </div>
+
+      <!-- Main Visual Editing Canvas -->
+      <div class="canvas-container" id="canvas-wrapper">
+        <canvas id="main-canvas"></canvas>
+      </div>
+
+      <!-- Loading overlay for advanced computations (Background removal, ML downloading) -->
+      <div class="loading-overlay" id="loading-overlay">
+        <div class="spinner"></div>
+        <div class="loading-status" id="loading-status">Running background removal model...</div>
+        <div class="loading-percentage" id="loading-percentage">Model initializing (0%)</div>
+      </div>
+
+      <!-- Footer Info -->
+      <div class="workspace-footer">
+        <div id="status-dimensions">No image loaded</div>
+        <div id="status-hover-color" style="font-family: monospace;">HEX: -- | RGB: (--, --, --)</div>
+      </div>
+
+    </main>
+
+    <!-- Right Sidebar Controls Accordion -->
+    <aside class="control-sidebar">
+      
+      <!-- Live Realtime Histogram Graph -->
+      <div class="histogram-panel">
+        <div class="histogram-header">
+          <span>RGB Distribution</span>
+          <span style="color: var(--text-accent);">Live Hist</span>
+        </div>
+        <canvas id="histogram-canvas" width="286" height="100"></canvas>
+      </div>
+
+      <!-- Tool Category Switcher Tabs -->
+      <div class="control-tabs">
+        <button class="tab-btn active" data-tab="tab-basic" title="Basic Adjustments">
+          <i class="fa-solid fa-crop-simple"></i>
+          <span>Basic</span>
+        </button>
+        <button class="tab-btn" data-tab="tab-filters" title="Filters & Effects">
+          <i class="fa-solid fa-sliders"></i>
+          <span>Filters</span>
+        </button>
+        <button class="tab-btn" data-tab="tab-transform" title="Geometric Transforms">
+          <i class="fa-solid fa-compress"></i>
+          <span>Warp</span>
+        </button>
+        <button class="tab-btn" data-tab="tab-advanced" title="Advanced Operations">
+          <i class="fa-solid fa-wand-magic-sparkles"></i>
+          <span>Adv</span>
+        </button>
+        <button class="tab-btn" data-tab="tab-export" title="Export Panel">
+          <i class="fa-solid fa-circle-down"></i>
+          <span>Export</span>
+        </button>
+      </div>
+
+      <!-- PANEL 1: Basic Edits -->
+      <div class="panel-content active" id="tab-basic">
+        
+        <div class="section-title">Canvas Rotations</div>
+        <div class="btn-group" style="margin-bottom: 12px;">
+          <button class="btn" id="btn-rotate-ccw" title="Rotate CCW 90"><i class="fa-solid fa-rotate-left"></i> -90°</button>
+          <button class="btn" id="btn-rotate-cw" title="Rotate CW 90"><i class="fa-solid fa-rotate-right"></i> +90°</button>
+        </div>
+
+        <div class="control-group">
+          <div class="control-label">
+            <span>Free Rotate Angle</span>
+            <span class="control-val" id="val-rotation">0°</span>
+          </div>
+          <input type="range" id="slider-rotation" min="-45" max="45" value="0" step="1">
+        </div>
+
+        <div class="section-title">Canvas Mirrors</div>
+        <div class="btn-group" style="margin-bottom: 12px;">
+          <button class="btn" id="btn-flip-h" title="Flip Horizontal"><i class="fa-solid fa-arrows-left-right"></i> Flip H</button>
+          <button class="btn" id="btn-flip-v" title="Flip Vertical"><i class="fa-solid fa-arrows-up-down"></i> Flip V</button>
+        </div>
+
+        <div class="section-title">Canvas Dimensions</div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px;">
+          <div>
+            <label style="font-size: 10px; color: var(--text-muted); display: block; margin-bottom: 4px;">Width (px)</label>
+            <input type="number" id="input-resize-w" placeholder="Width">
+          </div>
+          <div>
+            <label style="font-size: 10px; color: var(--text-muted); display: block; margin-bottom: 4px;">Height (px)</label>
+            <input type="number" id="input-resize-h" placeholder="Height">
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
+          <input type="checkbox" id="check-resize-ratio" checked style="width: auto; cursor: pointer;">
+          <label for="check-resize-ratio" style="font-size: 12px; color: var(--text-muted); cursor: pointer;">Lock Aspect Ratio</label>
+        </div>
+        <button class="btn primary" id="btn-apply-resize" style="margin-bottom: 16px;"><i class="fa-solid fa-up-right-and-down-left-from-center"></i> Resize Canvas</button>
+
+        <div class="section-title">Reset Panel</div>
+        <button class="btn danger" id="btn-reset-image"><i class="fa-solid fa-trash-arrow-up"></i> Reset All Edits</button>
+
+      </div>
+
+      <!-- PANEL 2: Sliders & Adjustments -->
+      <div class="panel-content" id="tab-filters">
+        
+        <div class="section-title">Light & Exposure</div>
+        
+        <div class="control-group">
+          <div class="control-label">
+            <span>Exposure</span>
+            <span class="control-val" id="val-exposure">0</span>
+          </div>
+          <input type="range" id="slider-exposure" min="-100" max="100" value="0">
+        </div>
+
+        <div class="control-group">
+          <div class="control-label">
+            <span>Brightness</span>
+            <span class="control-val" id="val-brightness">0</span>
+          </div>
+          <input type="range" id="slider-brightness" min="-100" max="100" value="0">
+        </div>
+
+        <div class="control-group">
+          <div class="control-label">
+            <span>Contrast</span>
+            <span class="control-val" id="val-contrast">0</span>
+          </div>
+          <input type="range" id="slider-contrast" min="-100" max="100" value="0">
+        </div>
+
+        <div class="control-group">
+          <div class="control-label">
+            <span>Highlights</span>
+            <span class="control-val" id="val-highlights">0</span>
+          </div>
+          <input type="range" id="slider-highlights" min="-100" max="100" value="0">
+        </div>
+
+        <div class="control-group">
+          <div class="control-label">
+            <span>Shadows</span>
+            <span class="control-val" id="val-shadows">0</span>
+          </div>
+          <input type="range" id="slider-shadows" min="-100" max="100" value="0">
+        </div>
+
+        <div class="section-title">Color Vibrancy</div>
+
+        <div class="control-group">
+          <div class="control-label">
+            <span>Saturation</span>
+            <span class="control-val" id="val-saturation">0</span>
+          </div>
+          <input type="range" id="slider-saturation" min="-100" max="100" value="0">
+        </div>
+
+        <div class="control-group">
+          <div class="control-label">
+            <span>Hue Rotation</span>
+            <span class="control-val" id="val-hueRotate">0°</span>
+          </div>
+          <input type="range" id="slider-hueRotate" min="-180" max="180" value="0">
+        </div>
+
+        <div class="section-title">Effects & Detail</div>
+
+        <div class="control-group">
+          <div class="control-label">
+            <span>Gaussian Blur</span>
+            <span class="control-val" id="val-blur">0px</span>
+          </div>
+          <input type="range" id="slider-blur" min="0" max="30" value="0" step="0.5">
+        </div>
+
+        <div class="control-group">
+          <div class="control-label">
+            <span>Sharpen</span>
+            <span class="control-val" id="val-sharpen">0</span>
+          </div>
+          <input type="range" id="slider-sharpen" min="0" max="100" value="0">
+        </div>
+
+        <div class="control-group">
+          <div class="control-label">
+            <span>Vignette Intensity</span>
+            <span class="control-val" id="val-vignette">0</span>
+          </div>
+          <input type="range" id="slider-vignette" min="0" max="100" value="0">
+        </div>
+
+        <div class="section-title">Quick Gradients</div>
+
+        <div class="control-group">
+          <div class="control-label">
+            <span>Grayscale</span>
+            <span class="control-val" id="val-grayscale">0%</span>
+          </div>
+          <input type="range" id="slider-grayscale" min="0" max="100" value="0">
+        </div>
+
+        <div class="control-group">
+          <div class="control-label">
+            <span>Sepia</span>
+            <span class="control-val" id="val-sepia">0%</span>
+          </div>
+          <input type="range" id="slider-sepia" min="0" max="100" value="0">
+        </div>
+
+        <div class="control-group">
+          <div class="control-label">
+            <span>Color Inversion</span>
+            <span class="control-val" id="val-invert">0%</span>
+          </div>
+          <input type="range" id="slider-invert" min="0" max="100" value="0">
+        </div>
+
+      </div>
+
+      <!-- PANEL 3: Transforms (Crop Aspect presets, Perspective Warping, Lens Radial) -->
+      <div class="panel-content" id="tab-transform">
+        
+        <div class="section-title">Crop Presets</div>
+        <div class="preset-grid">
+          <button class="preset-btn active" data-ratio="free">Free</button>
+          <button class="preset-btn" data-ratio="1:1">1:1</button>
+          <button class="preset-btn" data-ratio="4:3">4:3</button>
+          <button class="preset-btn" data-ratio="16:9">16:9</button>
+        </div>
+        <div class="btn-group" style="margin-bottom: 20px;">
+          <button class="btn" id="btn-crop-enable"><i class="fa-solid fa-expand"></i> Draw Bounding Box</button>
+          <button class="btn primary" id="btn-crop-apply" disabled><i class="fa-solid fa-check"></i> Crop Bounding</button>
+        </div>
+
+        <div class="section-title">4-Corner Perspective Warp</div>
+        <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 12px; line-height: 1.4;">
+          Drag the 4 corner handles over any quad shape on the image, then warp it flat. Excellent for business cards or document scanning!
+        </p>
+        <div class="btn-group" style="margin-bottom: 20px;">
+          <button class="btn" id="btn-perspective-enable"><i class="fa-solid fa-vector-square"></i> Corner Pins</button>
+          <button class="btn primary" id="btn-perspective-apply" disabled><i class="fa-solid fa-check"></i> Warp Flat</button>
+        </div>
+
+        <div class="section-title">Lens Correction</div>
+        <div class="control-group">
+          <div class="control-label">
+            <span>Barrel / Pincushion</span>
+            <span class="control-val" id="val-barrelDistortion">0</span>
+          </div>
+          <input type="range" id="slider-barrelDistortion" min="-100" max="100" value="0">
+        </div>
+
+      </div>
+
+      <!-- PANEL 4: Advanced Filters (WASM BG Removal, Sobel, EQ) -->
+      <div class="panel-content" id="tab-advanced">
+        
+        <div class="section-title">Background Removal</div>
+        <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 12px; line-height: 1.4;">
+          Removes backgrounds locally in your browser using an advanced WebAssembly neural network. Completely private — no images ever leave your device!
+        </p>
+        <button class="btn primary" id="btn-remove-bg" style="margin-bottom: 20px;">
+          <i class="fa-solid fa-person-circle-minus"></i> Remove Background
+        </button>
+
+        <div class="section-title">Dynamic Mathematical Math</div>
+        
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <button class="btn" id="btn-sobel-edge">
+            <i class="fa-solid fa-bolt"></i> Sobel Edge Map
+          </button>
+          
+          <button class="btn" id="btn-hist-eq">
+            <i class="fa-solid fa-chart-line"></i> Histogram Equalization
+          </button>
+          
+          <button class="btn" id="btn-noise-reduce">
+            <i class="fa-solid fa-filter"></i> Median Noise Reduction
+          </button>
+        </div>
+
+      </div>
+
+      <!-- PANEL 5: Export Configurations -->
+      <div class="panel-content" id="tab-export">
+        
+        <div class="section-title">Export Settings</div>
+        
+        <div class="control-group">
+          <label style="font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">File Format</label>
+          <select id="select-export-format">
+            <option value="png">PNG (Lossless / Transparent)</option>
+            <option value="jpg">JPEG (Highly Compressed)</option>
+            <option value="webp">WebP (Modern Compact)</option>
+          </select>
+        </div>
+
+        <div class="control-group" id="group-export-quality" style="display: none;">
+          <div class="control-label">
+            <span>Compression Quality</span>
+            <span class="control-val" id="val-export-quality">90%</span>
+          </div>
+          <input type="range" id="slider-export-quality" min="10" max="100" value="90">
+        </div>
+
+        <div class="section-title">Resolution Override</div>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px;">
+          <div>
+            <label style="font-size: 10px; color: var(--text-muted); display: block; margin-bottom: 4px;">Width (px)</label>
+            <input type="number" id="input-export-w" placeholder="Original">
+          </div>
+          <div>
+            <label style="font-size: 10px; color: var(--text-muted); display: block; margin-bottom: 4px;">Height (px)</label>
+            <input type="number" id="input-export-h" placeholder="Original">
+          </div>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 20px;">
+          <input type="checkbox" id="check-export-ratio" checked style="width: auto; cursor: pointer;">
+          <label for="check-export-ratio" style="font-size: 12px; color: var(--text-muted); cursor: pointer;">Maintain Aspect Ratio</label>
+        </div>
+
+        <button class="btn primary" id="btn-export-download" style="padding: 12px; font-weight: 600;">
+          <i class="fa-solid fa-download"></i> Download Exported Image
+        </button>
+
+      </div>
+
+    </aside>
+
+  </div>
+
+  <!-- Entry Script Orchestrator -->
+  <script type="module" src="ui.js"></script>
+</body>
+</html>
