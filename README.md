@@ -1,6 +1,7 @@
 # Modular Image Processing Toolkit
 
-A browser-based, client-side image processing application styled after professional photo editors like Figma and Adobe Lightroom. This toolkit operates entirely in the browser, using HTML5 Canvas, mathematical pixel matrices, and WebAssembly. No images ever leave the user's device, ensuring complete privacy and offline capability.
+
+A browser based, client-side image processing application styled after professional photo editors like Figma and Adobe Lightroom. This toolkit operates entirely in the browser, using HTML5 Canvas, mathematical pixel matrices, and WebAssembly. No images ever leave the user's device, ensuring complete privacy and offline capability.
 
 ---
 
